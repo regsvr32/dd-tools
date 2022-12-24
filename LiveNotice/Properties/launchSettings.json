@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "LiveNotice": {
+      "commandName": "Project",
+      "commandLineArgs": "-m"
+    }
+  }
+}
