@@ -48,7 +48,8 @@ namespace LiveNotice {
       var autoLaunchShortcut = $"{appData}\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{assemblyName}.lnk";
       if (File.Exists(autoLaunchShortcut)) {
         if (!newOptions.autoLaunch) { File.Delete(autoLaunchShortcut); }
-      } else {
+      }
+      else {
         if (newOptions.autoLaunch) {
           var shortcut = (IWshRuntimeLibrary.IWshShortcut)new IWshRuntimeLibrary.WshShellClass().CreateShortcut(autoLaunchShortcut);
           shortcut.TargetPath = AppContext.BaseDirectory + assemblyName + ".exe";
@@ -69,12 +70,12 @@ namespace LiveNotice {
       cancelTokenSource = new CancellationTokenSource();
       Task.Run(async () => {
         var notified = new HashSet<string>();
-        while (true) {
-          try {
-            nextQueryTime = DateTime.Now.AddSeconds(options.querySpanSeconds);
-            await Task.Delay(options.querySpanSeconds * 1000, cancelTokenSource.Token);
-            if (options.listenUids.Length == 0) { continue; }
-            using (var client = new HttpClient()) {
+        using (var client = new HttpClient()) {
+          while (true) {
+            try {
+              nextQueryTime = DateTime.Now.AddSeconds(options.querySpanSeconds);
+              await Task.Delay(options.querySpanSeconds * 1000, cancelTokenSource.Token);
+              if (options.listenUids.Length == 0) { continue; }
               var payload = JsonContent.Create(new { uids = options.listenUids.Where(str => str.Length > 0).Select(long.Parse).ToArray() });
               await payload.LoadIntoBufferAsync();
               var result = await client.PostAsync("https://api.live.bilibili.com/room/v1/Room/get_status_info_by_uids", payload, cancelTokenSource.Token);
@@ -89,26 +90,31 @@ namespace LiveNotice {
                     if (isLiving == notified.Contains(uid)) { continue; }
                     if (isLiving) {
                       var roomId = room.GetProperty("room_id").GetRawText();
-                      var coverImg = $"{cacheDirPath}\\{uid}.jpg";
-                      using (var input = await client.GetStreamAsync(room.GetProperty("cover_from_user").GetString(), cancelTokenSource.Token))
-                      using (var output = File.Create(coverImg)) { await input.CopyToAsync(output, cancelTokenSource.Token); }
-                      new ToastContentBuilder()
-                        .AddHeroImage(new Uri("file:///" + coverImg))
+                      var toast = new ToastContentBuilder()
                         .AddArgument(roomId)
                         .AddText($"{room.GetProperty("uname").GetString()}正在直播：{room.GetProperty("title").GetString()}")
-                        .AddText($"https://live.bilibili.com/{roomId}")
-                        .Show();
+                        .AddText($"https://live.bilibili.com/{roomId}");
+
+                      var cover = room.GetProperty("cover_from_user").GetString();
+                      if (!string.IsNullOrEmpty(cover)) {
+                        var coverImg = $"{cacheDirPath}\\{uid}.jpg";
+                        using (var input = await client.GetStreamAsync(room.GetProperty("cover_from_user").GetString(), cancelTokenSource.Token))
+                        using (var output = File.Create(coverImg)) { await input.CopyToAsync(output, cancelTokenSource.Token); }
+                        toast.AddHeroImage(new Uri("file:///" + coverImg));
+                      }
+                      toast.Show();
                       notified.Add(uid);
-                    } else {
+                    }
+                    else {
                       notified.Remove(uid);
                     }
                   }
                 }
               }
             }
+            catch (TaskCanceledException) { return; }
+            catch (Exception err) { Debug.WriteLine(err); }
           }
-          catch (TaskCanceledException) { return; }
-          catch (Exception err) { Debug.WriteLine(err); }
         }
       }, cancelTokenSource.Token);
     }
