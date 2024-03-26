@@ -71,6 +71,7 @@ namespace LiveNotice {
       Task.Run(async () => {
         var notified = new HashSet<string>();
         using (var client = new HttpClient()) {
+          client.Timeout = TimeSpan.FromSeconds(10);
           while (true) {
             try {
               nextQueryTime = DateTime.Now.AddSeconds(options.querySpanSeconds);
@@ -112,7 +113,9 @@ namespace LiveNotice {
                 }
               }
             }
-            catch (TaskCanceledException) { return; }
+            catch (TaskCanceledException err) {
+              if (err.CancellationToken == cancelTokenSource.Token) { return; }
+            }
             catch (Exception err) { Debug.WriteLine(err); }
           }
         }
