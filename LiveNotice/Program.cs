@@ -68,6 +68,7 @@ namespace LiveNotice {
     public static void startListen() {
       if (listening) { stopListen(); }
       cancelTokenSource = new CancellationTokenSource();
+      var cancelToken = cancelTokenSource.Token;
       Task.Run(async () => {
         var notified = new HashSet<string>();
         using (var client = new HttpClient()) {
@@ -75,11 +76,11 @@ namespace LiveNotice {
           while (true) {
             try {
               nextQueryTime = DateTime.Now.AddSeconds(options.querySpanSeconds);
-              await Task.Delay(options.querySpanSeconds * 1000, cancelTokenSource.Token);
+              await Task.Delay(options.querySpanSeconds * 1000, cancelToken);
               if (options.listenUids.Length == 0) { continue; }
               var payload = JsonContent.Create(new { uids = options.listenUids.Where(str => str.Length > 0).Select(long.Parse).ToArray() });
               await payload.LoadIntoBufferAsync();
-              var result = await client.PostAsync("https://api.live.bilibili.com/room/v1/Room/get_status_info_by_uids", payload, cancelTokenSource.Token);
+              var result = await client.PostAsync("https://api.live.bilibili.com/room/v1/Room/get_status_info_by_uids", payload, cancelToken);
               if (result.StatusCode == HttpStatusCode.OK) {
                 var content = JsonDocument.Parse(result.Content.ReadAsStream()).RootElement;
                 if (content.GetProperty("code").GetInt64() == 0) {
@@ -99,8 +100,8 @@ namespace LiveNotice {
                       var cover = room.GetProperty("cover_from_user").GetString();
                       if (!string.IsNullOrEmpty(cover)) {
                         var coverImg = $"{cacheDirPath}\\{uid}.jpg";
-                        using (var input = await client.GetStreamAsync(room.GetProperty("cover_from_user").GetString(), cancelTokenSource.Token))
-                        using (var output = File.Create(coverImg)) { await input.CopyToAsync(output, cancelTokenSource.Token); }
+                        using (var input = await client.GetStreamAsync(room.GetProperty("cover_from_user").GetString(), cancelToken))
+                        using (var output = File.Create(coverImg)) { await input.CopyToAsync(output, cancelToken); }
                         toast.AddHeroImage(new Uri("file:///" + coverImg));
                       }
                       toast.Show();
@@ -114,12 +115,12 @@ namespace LiveNotice {
               }
             }
             catch (TaskCanceledException err) {
-              if (err.CancellationToken == cancelTokenSource.Token) { return; }
+              if (err.CancellationToken == cancelToken) { return; }
             }
             catch (Exception err) { Debug.WriteLine(err); }
           }
         }
-      }, cancelTokenSource.Token);
+      }, cancelToken);
     }
 
     public static void stopListen() {
